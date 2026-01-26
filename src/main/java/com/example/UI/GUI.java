@@ -1,10 +1,15 @@
 package com.example.UI;
 
 import com.example.model.*;
+import javafx.animation.Animation;
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.geometry.Rectangle2D;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
@@ -14,6 +19,7 @@ import javafx.scene.paint.CycleMethod;
 import javafx.scene.paint.Stop;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.stage.Screen;
 import javafx.stage.Stage;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.effect.InnerShadow;
@@ -22,6 +28,7 @@ import javafx.scene.effect.Glow;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.TextAlignment;
 import javafx.scene.transform.Rotate;
+import javafx.util.Duration;
 
 import java.util.List;
 import java.util.Optional;
@@ -150,7 +157,9 @@ public class GUI extends Application {
         logArea = new TextArea();
         logArea.setEditable(false);
         logArea.setWrapText(true);
-        logArea.setPrefHeight(180);
+        //logArea.setPrefHeight(180);
+        logArea.setPrefHeight(260);
+
         logArea.setStyle(
                 "-fx-control-inner-background: #2c3e50; " +
                         "-fx-text-fill: #ecf0f1; " +
@@ -221,9 +230,13 @@ public class GUI extends Application {
                         "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.6), 15, 0.4, 0, 4);"
         );
 
-        ScrollPane logScroll = new ScrollPane(logArea);
+        ScrollPane logScroll = new ScrollPane();
+        logScroll.setContent(logArea);
         logScroll.setFitToWidth(true);
-        logScroll.setPrefHeight(180);
+        logScroll.setFitToHeight(true);
+        logScroll.setFitToWidth(true);
+        //logScroll.setPrefHeight(180);
+        logScroll.setPrefHeight(300);
         logScroll.setStyle("-fx-background: transparent; -fx-background-color: transparent;");
 
         Label logTitle = new Label("GAME LOG");
@@ -233,12 +246,14 @@ public class GUI extends Application {
 
         VBox logSection = new VBox(8, logTitle, logScroll);
         logSection.setPadding(new Insets(15));
+        logSection.setPrefHeight(300);
+        logSection.setPrefWidth(300);
         logSection.setStyle(
                 "-fx-background-color: #34495e; " +
                         "-fx-background-radius: 15; " +
                         "-fx-effect: dropshadow(gaussian, rgba(0,0,0,0.6), 15, 0.4, 0, 4);"
         );
-
+        VBox.setVgrow(logSection, Priority.ALWAYS);
         ScrollPane mainScroll = new ScrollPane();
         mainScroll.setContent(selectionArea);
         mainScroll.setFitToWidth(true);
@@ -247,7 +262,7 @@ public class GUI extends Application {
         HBox mainContent = new HBox(20, mainScroll, playerHandBox);
         mainContent.setAlignment(Pos.TOP_CENTER);
         HBox.setHgrow(mainScroll, Priority.ALWAYS);
-
+        mainScroll.setFitToHeight(true);
         VBox layout = new VBox(15, turnLabel, aiChoiceLabel, mainContent, logSection);
         layout.setPadding(new Insets(20));
         layout.setStyle("-fx-background-color: linear-gradient(to bottom, #1a1a2e, #16213e);");
@@ -256,12 +271,28 @@ public class GUI extends Application {
         log("Your cards: " + human.getHand());
         log("First turn: " + game.getCurrentPlayer().getName());
 
-        Scene scene = new Scene(layout, 1400, 900);
-        stage.setScene(scene);
+        Rectangle2D screen = Screen.getPrimary().getVisualBounds();
+
+        double width  = screen.getWidth()  * 0.9;
+        double height = screen.getHeight() * 0.9;
+
+        ScrollPane rootScroll = new ScrollPane(layout);
+        rootScroll.setFitToWidth(true);
+        rootScroll.setFitToHeight(true);
+        rootScroll.setPannable(true);
+        rootScroll.setStyle("-fx-background: transparent;");
+
+        Scene scene = new Scene(rootScroll, width, height);
+        suspectCardsBox.prefWrapLengthProperty().bind(scene.widthProperty().multiply(0.6));
+        weaponCardsBox.prefWrapLengthProperty().bind(scene.widthProperty().multiply(0.6));
+        roomCardsBox.prefWrapLengthProperty().bind(scene.widthProperty().multiply(0.6));
+
+        stage.setMinWidth(screen.getWidth() * 0.7);
+        stage.setMinHeight(screen.getHeight() * 0.7);
         stage.setTitle("Clue - Local Multiplayer");
-        stage.setMinWidth(1200);
-        stage.setMinHeight(800);
+        stage.setScene(scene);
         stage.show();
+
 
         runTurnsUntilHuman();
     }
@@ -332,13 +363,16 @@ public class GUI extends Application {
     private void createCardButtons(FlowPane container, List<Card> cards, String category) {
         for (Card card : cards) {
             StackPane cardBox = create3DCard(card, category);
+            cardBox.setUserData(card);
             cardBox.setOnMouseClicked(e -> selectCard(card, category, container));
             container.getChildren().add(cardBox);
         }
+
         if (!cards.isEmpty()) {
             highlightSelectedCard(container, 0);
         }
     }
+
 
     private StackPane create3DCard(Card card, String category) {
         StackPane cardStack = new StackPane();
@@ -544,54 +578,48 @@ public class GUI extends Application {
         return "?";
     }
 
-    private void selectCard(Card card, String category, FlowPane container) {
+    private void selectCard(Card selected, String category, FlowPane container) {
+
+        // Update selected reference
         if (category.equals("SUSPECT")) {
-            selectedSuspect = card;
+            selectedSuspect = selected;
         } else if (category.equals("WEAPON")) {
-            selectedWeapon = card;
+            selectedWeapon = selected;
         } else if (category.equals("ROOM")) {
-            selectedRoom = card;
+            selectedRoom = selected;
         }
 
-        List<Card> cards = category.equals("SUSPECT") ? game.getSuspectCards() :
-                category.equals("WEAPON") ? game.getWeaponCards() :
-                        game.getRoomCards();
+        for (Node node : container.getChildren()) {
+            StackPane cardStack = (StackPane) node;
+            Card card = (Card) cardStack.getUserData();
 
-        for (int i = 0; i < container.getChildren().size(); i++) {
-            StackPane cardStack = (StackPane) container.getChildren().get(i);
-            Card cardAtIndex = cards.get(i);
+            VBox frontCard = (VBox) cardStack.getChildren().get(2);
 
-            if (cardAtIndex.equals(card)) {
-                // Selected state - golden glow
+            if (card.equals(selected)) {
+                // Selected style
                 DropShadow glow = new DropShadow();
                 glow.setColor(Color.rgb(241, 196, 15, 0.9));
                 glow.setRadius(25);
                 glow.setSpread(0.6);
+
                 cardStack.setEffect(glow);
                 cardStack.setScaleX(1.1);
                 cardStack.setScaleY(1.1);
                 cardStack.setTranslateY(-8);
 
-                // Add golden border to front card
-                VBox frontCard = (VBox) cardStack.getChildren().get(2);
-                frontCard.setStyle(frontCard.getStyle().replace(
-                        "-fx-border-color: rgba(255, 255, 255, 0.3);",
-                        "-fx-border-color: #f1c40f;"
-                ).replace(
-                        "-fx-border-width: 2;",
-                        "-fx-border-width: 4;"
-                ));
+                frontCard.setStyle(frontCard.getStyle()
+                        .replace("-fx-border-color: rgba(255, 255, 255, 0.3);", "-fx-border-color: #f1c40f;")
+                        .replace("-fx-border-width: 2;", "-fx-border-width: 4;")
+                );
             } else {
+                // Reset style
                 cardStack.setEffect(null);
                 cardStack.setScaleX(1.0);
                 cardStack.setScaleY(1.0);
                 cardStack.setTranslateY(0);
 
-                // Reset front card border
-                VBox frontCard = (VBox) cardStack.getChildren().get(2);
-                String bgGradient = getCardGradient(category);
                 frontCard.setStyle(
-                        "-fx-background-color: " + bgGradient + "; " +
+                        "-fx-background-color: " + getCardGradient(category) + "; " +
                                 "-fx-background-radius: 12; " +
                                 "-fx-border-color: rgba(255, 255, 255, 0.3); " +
                                 "-fx-border-radius: 12; " +
@@ -623,8 +651,11 @@ public class GUI extends Application {
 
     private void updatePlayerHandDisplay() {
         playerHandBox.getChildren().clear();
-        playerHandBox.setMinWidth(280);
-        playerHandBox.setMaxWidth(280);
+        playerHandBox.setPrefWidth(260);
+        playerHandBox.setMinWidth(200);
+        playerHandBox.setMaxWidth(320);
+        HBox.setHgrow(playerHandBox, Priority.SOMETIMES);
+
 
         Label title = new Label("YOUR HAND");
         title.setFont(Font.font("Arial", FontWeight.BOLD, 16));
@@ -817,74 +848,117 @@ public class GUI extends Application {
     private void runTurnsUntilHuman() {
         suggestBtn.setDisable(true);
         accuseBtn.setDisable(true);
-        while (true) {
+
+        Timeline timeline = new Timeline();
+        timeline.setCycleCount(Animation.INDEFINITE);
+
+        KeyFrame frame = new KeyFrame(Duration.seconds(1), e -> {
             Player current = game.getCurrentPlayer();
-            if (current == null) break;
+
+            if (current == null) {
+                timeline.stop();
+                return;
+            }
+
             if (current.isEliminated()) {
                 game.advanceTurn();
                 updateTurnLabel();
-                continue;
+                return;
             }
+
             if (current == human) {
                 suggestBtn.setDisable(false);
                 accuseBtn.setDisable(false);
                 updateTurnLabel();
-                break;
+                timeline.stop();
+                return;
             }
-            AIPlayer ai = (AIPlayer) current;
-            log("AI TURN: " + ai.getName() + "'s turn");
-            if (ai.wantsToAccuse()) {
-                Suggestion accusation = ai.makeRandomSuggestion(game);
-                log("AI ACCUSATION: " + ai.getName() + " accuses: " + accusation);
 
-                // Display AI's accusation
-                updateAIChoiceDisplay(ai.getName() + " ACCUSES: " +
-                        accusation.getSuspect().getName() + " + " +
-                        accusation.getWeapon().getName() + " + " +
-                        accusation.getRoom().getName(), true);
+            handleAITurn((AIPlayer) current);
+        });
 
-                if (game.checkAccusation(accusation)) {
-                    log("AI WINS: " + ai.getName() + " accused correctly and wins!");
-                    endGame(false);
+        timeline.getKeyFrames().add(frame);
+        timeline.play();
+    }
+    private void handleAITurn(AIPlayer ai) {
+        log("AI TURN: " + ai.getName());
+
+        // AI decides whether to accuse
+        if (ai.wantsToAccuse()) {
+
+            Suggestion accusation = ai.makeRandomSuggestion(game);
+
+            log("AI ACCUSATION: " + ai.getName() + " accuses: " + accusation);
+
+            // Show AI accusation in UI
+            updateAIChoiceDisplay(
+                    ai.getName() + " ACCUSES: " +
+                            accusation.getSuspect().getName() + " + " +
+                            accusation.getWeapon().getName() + " + " +
+                            accusation.getRoom().getName(),
+                    true
+            );
+
+            // Check accusation
+            if (game.checkAccusation(accusation)) {
+                log("AI WINS: " + ai.getName() + " accused correctly and wins!");
+                endGame(false);
+                return;
+            } else {
+                log("AI ELIMINATED: " + ai.getName() + " accused incorrectly.");
+                ai.setEliminated(true);
+
+                if (game.activePlayersCount() <= 1) {
+                    endGame(true);
                     return;
-                } else {
-                    log("AI ELIMINATED: " + ai.getName() + " accused incorrectly.");
-                    ai.setEliminated(true);
-
-                    if (game.activePlayersCount() <= 1) {
-                        endGame(true);
-                        return;
-                    }
-                    game.advanceTurn();
-                    updateTurnLabel();
-                    continue;
                 }
-            }
-            Suggestion suggestion = ai.makeRandomSuggestion(game);
-            log("AI SUGGESTION: " + ai.getName() + " suggests: " + suggestion);
 
-            // Display AI's suggestion
-            updateAIChoiceDisplay(ai.getName() + " SUGGESTS: " +
-                    suggestion.getSuspect().getName() + " + " +
-                    suggestion.getWeapon().getName() + " + " +
-                    suggestion.getRoom().getName(), true);
-
-            Optional<Card> refute = game.resolveSuggestion(ai, suggestion);
-
-            if (refute.isPresent()) log("REFUTED: Someone refutes " + ai.getName() + "'s suggestion with: " + refute.get());
-            else log("NO REFUTE: No one could refute " + ai.getName() + "'s suggestion.");
-            game.advanceTurn();
-            updateTurnLabel();
-            if (game.activePlayersCount() <= 1) {
-                Player winner = null;
-                for (Player p : game.getPlayers()) {
-                    if (!p.isEliminated()) winner = p;
-                }
-                endGame(winner == human);
+                game.advanceTurn();
+                updateTurnLabel();
                 return;
             }
         }
+
+        // Otherwise AI makes a suggestion
+        Suggestion suggestion = ai.makeRandomSuggestion(game);
+
+        log("AI SUGGESTION: " + ai.getName() + " suggests: " + suggestion);
+
+        // Show AI suggestion in UI
+        updateAIChoiceDisplay(
+                ai.getName() + " SUGGESTS: " +
+                        suggestion.getSuspect().getName() + " + " +
+                        suggestion.getWeapon().getName() + " + " +
+                        suggestion.getRoom().getName(),
+                true
+        );
+
+        Optional<Card> refute = game.resolveSuggestion(ai, suggestion);
+
+        if (refute.isPresent()) {
+            log("REFUTED: Someone refutes " + ai.getName() +
+                    "'s suggestion with: " + refute.get());
+        } else {
+            log("NO REFUTE: No one could refute " + ai.getName() + "'s suggestion.");
+        }
+
+        game.advanceTurn();
+        updateTurnLabel();
+
+        // Check if only one player remains
+        if (game.activePlayersCount() <= 1) {
+            Player winner = null;
+            for (Player p : game.getPlayers()) {
+                if (!p.isEliminated()) {
+                    winner = p;
+                    break;
+                }
+            }
+            endGame(winner == human);
+        }
     }
+
+
 
     private void updateTurnLabel() {
         Player cur = game.getCurrentPlayer();
